@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useSelector } from 'react-redux'
 import useFetch from '../hooks/useFetch'
 import MainLayout from '../layouts/MainLayout'
@@ -10,15 +10,15 @@ const AdminUsers = () => {
   const [users, setUsers] = useState([])
   const [editing, setEditing] = useState({})
 
-  const loadUsers = () => {
+  const loadUsers = useCallback(() => {
     const cfg = { url: '/users', method: 'get', headers: { Authorization: authState.token } }
     fetchData(cfg, { showSuccessToast: false }).then(d => setUsers(d.users)).catch(()=>{})
-  }
+  }, [fetchData, authState.token])
 
   useEffect(() => {
     if (!authState.isLoggedIn || !authState.user || authState.user.role !== 'admin') return
     loadUsers()
-  }, [authState.isLoggedIn])
+  }, [authState.isLoggedIn, authState.user, loadUsers])
 
   const handleRoleChange = (id, role) => {
     setEditing(e => ({ ...e, [id]: true }))

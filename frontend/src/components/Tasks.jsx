@@ -26,7 +26,7 @@ const Tasks = () => {
       const config = { url: "/users", method: "get", headers: { Authorization: authState.token } };
       fetchData(config, { showSuccessToast: false }).then(data => setUsers(data.users)).catch(()=>{});
     }
-  }, [authState.isLoggedIn, fetchTasks]);
+  }, [authState.isLoggedIn, fetchTasks, fetchData, authState.token, authState.user]);
 
 
   const handleDelete = (id) => {
