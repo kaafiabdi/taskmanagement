@@ -79,6 +79,11 @@ const Task = () => {
 
   const handleSubmit = e => {
     e.preventDefault()
+    // Prevent non-admin users from updating assigned tasks
+    if (mode === 'update' && task && task.assignee && authState.user?.role !== 'admin') {
+      alert('Only admin can update tasks that have been assigned.')
+      return
+    }
     const errors = validateManyFields('task', formData)
     setFormErrors({})
 
@@ -106,6 +111,26 @@ const Task = () => {
       }
       fetchData(config).then(() => navigate('/'))
     }
+  }
+
+  const handleDelete = e => {
+    e?.preventDefault()
+    if (!task) return
+
+    if (task.assignee && authState.user?.role !== 'admin') {
+      alert('Only admin can delete tasks that have been assigned.')
+      return
+    }
+
+    if (!window.confirm('Are you sure you want to delete this task?')) return
+
+    const cfg = {
+      url: `/tasks/${taskId}`,
+      method: 'delete',
+      headers: { Authorization: authState.token }
+    }
+
+    fetchData(cfg).then(() => navigate('/'))
   }
 
   const fieldError = field => (
@@ -196,6 +221,8 @@ const Task = () => {
             <button
               className='bg-primary text-white px-4 py-2 font-medium hover:bg-primary-dark'
               onClick={handleSubmit}
+              disabled={mode === 'update' && task && task.assignee && authState.user?.role !== 'admin'}
+              aria-disabled={mode === 'update' && task && task.assignee && authState.user?.role !== 'admin'}
             >
               {mode === 'add' ? 'Add task' : 'Update Task'}
             </button>
@@ -214,6 +241,21 @@ const Task = () => {
               >
                 Reset
               </button>
+            )}
+            {mode === 'update' && (
+              <button
+                className='ml-4 bg-red-600 text-white px-4 py-2 font-medium hover:bg-red-700'
+                onClick={handleDelete}
+              >
+                Kasaar (Delete)
+              </button>
+            )}
+
+            {/* Info for non-admins when task is assigned */}
+            {mode === 'update' && task && task.assignee && authState.user?.role !== 'admin' && (
+              <p className='mt-3 text-sm text-yellow-700'>
+                Only admin can update or delete tasks that have already been assigned.
+              </p>
             )}
           </>
         )}
