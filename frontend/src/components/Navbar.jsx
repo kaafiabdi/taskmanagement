@@ -28,6 +28,9 @@ const Navbar = () => {
               <li className="bg-blue-500 text-white hover:bg-blue-600 font-medium rounded-md">
                 <Link to='/tasks/add' className='block w-full h-full px-4 py-2'> <i className="fa-solid fa-plus"></i> Add task </Link>
               </li>
+              {authState.user && authState.user.role === 'admin' && (
+                <li className='py-2 px-3 cursor-pointer text-primary hover:bg-gray-100 transition rounded-sm'><Link to="/admin/users">Admin</Link></li>
+              )}
               <li className='py-2 px-3 cursor-pointer hover:bg-gray-200 transition rounded-sm' onClick={handleLogoutClick}>Logout</li>
             </>
           ) : (

@@ -17,9 +17,11 @@ const Task = () => {
   const mode = taskId === undefined ? "add" : "update";
   const [task, setTask] = useState(null);
   const [formData, setFormData] = useState({
-    description: ""
+    description: "",
+    userId: ""
   });
   const [formErrors, setFormErrors] = useState({});
+  const [users, setUsers] = useState([]);
 
 
   useEffect(() => {
@@ -34,6 +36,11 @@ const Task = () => {
         setTask(data.task);
         setFormData({ description: data.task.description });
       });
+    }
+    // if adding and current user is admin, fetch users for selection
+    if (mode === "add" && authState.user && authState.user.role === "admin") {
+      const cfg = { url: "/users", method: "get", headers: { Authorization: authState.token } };
+      fetchData(cfg, { showSuccessToast: false }).then(d => setUsers(d.users)).catch(()=>{});
     }
   }, [mode, authState, taskId, fetchData]);
 
@@ -93,11 +100,37 @@ const Task = () => {
           ) : (
             <>
               <h2 className='text-center mb-4'>{mode === "add" ? "Add New Task" : "Edit Task"}</h2>
+              {mode !== 'add' && task && (
+                <div className='mb-4 flex gap-2'>
+                  <span className='text-xs px-2 py-1 bg-gray-100 rounded text-gray-700'>
+                    Creator: {task.user ? (task.user._id === authState.user?._id ? 'You' : task.user.name) : 'Unknown'}
+                  </span>
+                  {task.assignee ? (
+                    <span className={`text-xs px-2 py-1 rounded ${task.assignee._id === authState.user?._id ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
+                      Assigned to: {task.assignee.name}
+                    </span>
+                  ) : (
+                    <span className='text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded'>Unassigned</span>
+                  )}
+                </div>
+              )}
               <div className="mb-4">
                 <label htmlFor="description">Description</label>
                 <Textarea type="description" name="description" id="description" value={formData.description} placeholder="Write here.." onChange={handleChange} />
                 {fieldError("description")}
               </div>
+
+              {mode === "add" && authState.user && authState.user.role === "admin" && (
+                <div className="mb-4">
+                  <label htmlFor="userId">Assign To (user)</label>
+                  <select id="userId" name="userId" value={formData.userId} onChange={handleChange} className="w-full border px-2 py-2 rounded">
+                    <option value="">Select a user</option>
+                    {users.map(u => (
+                      <option key={u._id} value={u._id}>{u.name} - {u.email}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <button className='bg-primary text-white px-4 py-2 font-medium hover:bg-primary-dark' onClick={handleSubmit}>{mode === "add" ? "Add task" : "Update Task"}</button>
               <button className='ml-4 bg-red-500 text-white px-4 py-2 font-medium' onClick={() => navigate("/")}>Cancel</button>

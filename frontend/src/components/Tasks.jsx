@@ -9,6 +9,8 @@ const Tasks = () => {
 
   const authState = useSelector(state => state.authReducer);
   const [tasks, setTasks] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [assigneeMap, setAssigneeMap] = useState({});
   const [fetchData, { loading }] = useFetch();
 
   const fetchTasks = useCallback(() => {
@@ -19,6 +21,11 @@ const Tasks = () => {
   useEffect(() => {
     if (!authState.isLoggedIn) return;
     fetchTasks();
+    // if admin, fetch users for assignment
+    if (authState.user && authState.user.role === "admin") {
+      const config = { url: "/users", method: "get", headers: { Authorization: authState.token } };
+      fetchData(config, { showSuccessToast: false }).then(data => setUsers(data.users)).catch(()=>{});
+    }
   }, [authState.isLoggedIn, fetchTasks]);
 
 
@@ -65,6 +72,38 @@ const Tasks = () => {
 
                   </div>
                   <div className='whitespace-pre'>{task.description}</div>
+                  <div className='mt-2 flex items-center gap-2'>
+                    <span className='text-xs px-2 py-1 bg-gray-100 rounded text-gray-700'>
+                      Created by: {task.user? (task.user._id === authState.user?._id ? 'You' : task.user.name) : 'Unknown'}
+                    </span>
+                    {task.assignee ? (
+                      <span className={`text-xs px-2 py-1 rounded ${task.assignee._id === authState.user?._id ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
+                        Assigned to: {task.assignee.name}
+                      </span>
+                    ) : (
+                      <span className='text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded'>Unassigned</span>
+                    )}
+
+                    {authState.user && authState.user.role === "admin" && (
+                    <div className='mt-2 flex items-center gap-2'>
+                      <select className='border px-2 py-1 rounded' value={assigneeMap[task._id] || (task.assignee?._id || "")} onChange={(e)=> setAssigneeMap(s=>({...s, [task._id]: e.target.value}))}>
+                        <option value="">Unassigned</option>
+                        {users.map(u => (
+                            <option key={u._id} value={u._id}>{u.name} - {u.email}</option>
+                          ))}
+                      </select>
+                      <button className='bg-blue-500 text-white px-3 py-1 rounded' onClick={async ()=>{
+                        const userId = assigneeMap[task._id] || "";
+                        const config = { url: `/tasks/${task._id}/assign`, method: "post", headers: { Authorization: authState.token }, data: { userId } };
+                        try {
+                          await fetchData(config);
+                          fetchTasks();
+                        } catch (err) {}
+                      }}>Assign</button>
+                      {task.assignee && <span className='text-sm text-gray-500'> </span>}
+                    </div>
+                    )}
+                  </div>
                 </div>
               ))
 

@@ -7,6 +7,7 @@ require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const profileRoutes = require("./routes/profileRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 app.use(express.json());
 app.use(cors());
@@ -32,6 +33,7 @@ mongoose.connect(mongoUrl, err => {
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/users", userRoutes);
 
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.resolve(__dirname, "../frontend/build")));
