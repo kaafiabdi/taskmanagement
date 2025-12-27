@@ -10,10 +10,11 @@ import validateManyFields from '../validations'
 const Task = () => {
   const authState = useSelector(state => state.authReducer)
   const navigate = useNavigate()
-  const [fetchData, { loading }] = useFetch()
   const { taskId } = useParams()
+  const [fetchData, { loading }] = useFetch()
 
   const mode = taskId === undefined ? 'add' : 'update'
+  const isAdmin = authState.user?.role === 'admin'
 
   const [task, setTask] = useState(null)
   const [users, setUsers] = useState([])
@@ -22,6 +23,13 @@ const Task = () => {
     userId: ''
   })
   const [formErrors, setFormErrors] = useState({})
+
+  /* 🚫 User ha geli karin add task page */
+  useEffect(() => {
+    if (mode === 'add' && !isAdmin) {
+      navigate('/')
+    }
+  }, [mode, isAdmin, navigate])
 
   /* page title */
   useEffect(() => {
@@ -44,10 +52,9 @@ const Task = () => {
     })
   }, [mode, taskId, authState.token, fetchData])
 
-  /* load users for admin */
+  /* load users (admin only) */
   const loadUsers = useCallback(() => {
-    if (mode !== 'add') return
-    if (!authState.user || authState.user.role !== 'admin') return
+    if (mode !== 'add' || !isAdmin) return
 
     const cfg = {
       url: '/users',
@@ -58,7 +65,7 @@ const Task = () => {
     fetchData(cfg, { showSuccessToast: false })
       .then(d => setUsers(d.users))
       .catch(() => {})
-  }, [mode, authState.user, authState.token, fetchData])
+  }, [mode, isAdmin, authState.token, fetchData])
 
   useEffect(() => {
     loadTask()
@@ -79,11 +86,6 @@ const Task = () => {
 
   const handleSubmit = e => {
     e.preventDefault()
-    // Prevent non-admin users from updating assigned tasks
-    if (mode === 'update' && task && task.assignee && authState.user?.role !== 'admin') {
-      alert('Only admin can update tasks that have been assigned.')
-      return
-    }
     const errors = validateManyFields('task', formData)
     setFormErrors({})
 
@@ -94,43 +96,22 @@ const Task = () => {
       return
     }
 
-    if (mode === 'add') {
-      const config = {
-        url: '/tasks',
-        method: 'post',
-        data: formData,
-        headers: { Authorization: authState.token }
-      }
-      fetchData(config).then(() => navigate('/'))
-    } else {
-      const config = {
-        url: `/tasks/${taskId}`,
-        method: 'put',
-        data: formData,
-        headers: { Authorization: authState.token }
-      }
-      fetchData(config).then(() => navigate('/'))
-    }
-  }
+    const config =
+      mode === 'add'
+        ? {
+            url: '/tasks',
+            method: 'post',
+            data: formData,
+            headers: { Authorization: authState.token }
+          }
+        : {
+            url: `/tasks/${taskId}`,
+            method: 'put',
+            data: formData,
+            headers: { Authorization: authState.token }
+          }
 
-  const handleDelete = e => {
-    e?.preventDefault()
-    if (!task) return
-
-    if (task.assignee && authState.user?.role !== 'admin') {
-      alert('Only admin can delete tasks that have been assigned.')
-      return
-    }
-
-    if (!window.confirm('Are you sure you want to delete this task?')) return
-
-    const cfg = {
-      url: `/tasks/${taskId}`,
-      method: 'delete',
-      headers: { Authorization: authState.token }
-    }
-
-    fetchData(cfg).then(() => navigate('/'))
+    fetchData(config).then(() => navigate('/'))
   }
 
   const fieldError = field => (
@@ -155,29 +136,21 @@ const Task = () => {
               {mode === 'add' ? 'Add New Task' : 'Edit Task'}
             </h2>
 
-            {mode !== 'add' && task && (
+            {mode === 'update' && task && (
               <div className='mb-4 flex gap-2'>
-                <span className='text-xs px-2 py-1 bg-gray-100 rounded text-gray-700'>
+                <span className='text-xs px-2 py-1 bg-gray-100 rounded'>
                   Creator:{' '}
-                  {task.user
-                    ? task.user._id === authState.user?._id
-                      ? 'You'
-                      : task.user.name
-                    : 'Unknown'}
+                  {task.user?._id === authState.user?._id
+                    ? 'You'
+                    : task.user?.name || 'Unknown'}
                 </span>
 
                 {task.assignee ? (
-                  <span
-                    className={`text-xs px-2 py-1 rounded ${
-                      task.assignee._id === authState.user?._id
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-700'
-                    }`}
-                  >
+                  <span className='text-xs px-2 py-1 bg-green-100 rounded'>
                     Assigned to: {task.assignee.name}
                   </span>
                 ) : (
-                  <span className='text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded'>
+                  <span className='text-xs px-2 py-1 bg-yellow-100 rounded'>
                     Unassigned
                   </span>
                 )}
@@ -185,47 +158,45 @@ const Task = () => {
             )}
 
             <div className='mb-4'>
-              <label htmlFor='description'>Description</label>
+              <label>Description</label>
               <Textarea
                 name='description'
-                id='description'
                 value={formData.description}
-                placeholder='Write here..'
                 onChange={handleChange}
+                placeholder='Write here...'
               />
               {fieldError('description')}
             </div>
 
-            {mode === 'add' &&
-              authState.user &&
-              authState.user.role === 'admin' && (
-                <div className='mb-4'>
-                  <label htmlFor='userId'>Assign To (user)</label>
-                  <select
-                    id='userId'
-                    name='userId'
-                    value={formData.userId}
-                    onChange={handleChange}
-                    className='w-full border px-2 py-2 rounded'
-                  >
-                    <option value=''>Select a user</option>
-                    {users.map(u => (
-                      <option key={u._id} value={u._id}>
-                        {u.name} - {u.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            {/* ✅ Assign user (ADMIN ONLY) */}
+            {mode === 'add' && isAdmin && (
+              <div className='mb-4'>
+                <label>Assign To</label>
+                <select
+                  name='userId'
+                  value={formData.userId}
+                  onChange={handleChange}
+                  className='w-full border px-2 py-2 rounded'
+                >
+                  <option value=''>Select user</option>
+                  {users.map(u => (
+                    <option key={u._id} value={u._id}>
+                      {u.name} - {u.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-            <button
-              className='bg-primary text-white px-4 py-2 font-medium hover:bg-primary-dark'
-              onClick={handleSubmit}
-              disabled={mode === 'update' && task && task.assignee && authState.user?.role !== 'admin'}
-              aria-disabled={mode === 'update' && task && task.assignee && authState.user?.role !== 'admin'}
-            >
-              {mode === 'add' ? 'Add task' : 'Update Task'}
-            </button>
+            {/* ✅ Add / Update button (ADMIN ONLY FOR ADD) */}
+            {!(mode === 'add' && !isAdmin) && (
+              <button
+                className='bg-primary text-white px-4 py-2 font-medium'
+                onClick={handleSubmit}
+              >
+                {mode === 'add' ? 'Add Task' : 'Update Task'}
+              </button>
+            )}
 
             <button
               className='ml-4 bg-red-500 text-white px-4 py-2 font-medium'
@@ -236,26 +207,11 @@ const Task = () => {
 
             {mode === 'update' && (
               <button
-                className='ml-4 bg-blue-500 text-white px-4 py-2 font-medium hover:bg-blue-600'
+                className='ml-4 bg-blue-500 text-white px-4 py-2 font-medium'
                 onClick={handleReset}
               >
                 Reset
               </button>
-            )}
-            {mode === 'update' && (
-              <button
-                className='ml-4 bg-red-600 text-white px-4 py-2 font-medium hover:bg-red-700'
-                onClick={handleDelete}
-              >
-                Kasaar (Delete)
-              </button>
-            )}
-
-            {/* Info for non-admins when task is assigned */}
-            {mode === 'update' && task && task.assignee && authState.user?.role !== 'admin' && (
-              <p className='mt-3 text-sm text-yellow-700'>
-                Only admin can update or delete tasks that have already been assigned.
-              </p>
             )}
           </>
         )}
