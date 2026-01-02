@@ -13,7 +13,7 @@ const Login = () => {
 
   return (
     <>
-      <MainLayout>
+      <MainLayout hideNavbar>
         <LoginForm redirectUrl={redirectUrl} />
       </MainLayout>
     </>

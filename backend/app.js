@@ -12,6 +12,9 @@ const userRoutes = require("./routes/userRoutes");
 app.use(express.json());
 app.use(cors());
 
+// Serve uploaded files
+app.use('/uploads', express.static(path.resolve(__dirname, 'uploads')));
+
 const mongoUrl = process.env.MONGODB_URL;
 if (!mongoUrl) {
   console.error('MONGODB_URL is not defined. Set it in backend/.env or as an environment variable.');
@@ -35,12 +38,32 @@ app.use("/api/tasks", taskRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/users", userRoutes);
 
+// Health check endpoints
+app.get('/health', (req, res) => {
+  return res.status(200).json({ status: true, msg: 'OK', uptime: process.uptime(), timestamp: Date.now() });
+});
+
+app.get('/api/health', (req, res) => {
+  return res.status(200).json({ status: true, msg: 'API OK', uptime: process.uptime(), timestamp: Date.now() });
+});
+
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.resolve(__dirname, "../frontend/build")));
   app.get("*", (req, res) => res.sendFile(path.resolve(__dirname, "../frontend/build/index.html")));
 }
 
 const port = process.env.PORT || 5000;
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Backend is running on port ${port}`);
+});
+
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`\nError: Port ${port} is already in use.`);
+    console.error('Please stop the process using that port or start the server on a different port.');
+    console.error(`On Windows: run \`netstat -ano | findstr :${port}\` to find the PID, then \`taskkill /PID <PID> /F\`.\n`);
+    process.exit(1);
+  }
+  // rethrow unexpected errors
+  throw err;
 });

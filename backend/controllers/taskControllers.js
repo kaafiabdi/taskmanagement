@@ -4,15 +4,45 @@ const { validateObjectId } = require("../utils/validation");
 
 exports.getTasks = async (req, res) => {
   try {
-    let query = {};
-    if (req.user.role === "admin") {
-      query = {};
+    const { search, status, page = 1, limit = 20, priority, tags } = req.query;
+
+    const filters = [];
+    if (req.user.role !== 'admin') {
+      filters.push({ $or: [{ user: req.user.id }, { assignee: req.user.id }] });
     }
-    else {
-      query = { $or: [{ user: req.user.id }, { assignee: req.user.id }] };
+
+    if (search) {
+      filters.push({ description: { $regex: String(search), $options: 'i' } });
     }
-    const tasks = await Task.find(query).populate("assignee", "name email").populate("user", "name email");
-    res.status(200).json({ tasks, status: true, msg: "Tasks found successfully.." });
+
+    if (status) {
+      filters.push({ status: status });
+    }
+
+    if (priority) {
+      filters.push({ priority: priority });
+    }
+
+    if (tags) {
+      const tagsArr = String(tags).split(',').map(t => t.trim()).filter(Boolean);
+      if (tagsArr.length) filters.push({ tags: { $in: tagsArr } });
+    }
+
+    const finalQuery = filters.length ? { $and: filters } : {};
+
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const perPage = Math.min(100, Math.max(1, parseInt(limit) || 20));
+
+    const total = await Task.countDocuments(finalQuery);
+    const tasks = await Task.find(finalQuery)
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * perPage)
+      .limit(perPage)
+      .populate("assignee", "name email")
+      .populate("user", "name email")
+      .populate("creator", "name email");
+
+    res.status(200).json({ tasks, total, page: pageNum, perPage, status: true, msg: "Tasks found successfully.." });
   }
   catch (err) {
     console.error(err);
@@ -28,10 +58,10 @@ exports.getTask = async (req, res) => {
 
     let task;
     if (req.user.role === "admin") {
-      task = await Task.findById(req.params.taskId).populate("assignee", "name email").populate("user", "name email");
+      task = await Task.findById(req.params.taskId).populate("assignee", "name email").populate("user", "name email").populate("creator", "name email");
     }
     else {
-      task = await Task.findOne({ _id: req.params.taskId, $or: [{ user: req.user.id }, { assignee: req.user.id }] }).populate("assignee", "name email").populate("user", "name email");
+      task = await Task.findOne({ _id: req.params.taskId, $or: [{ user: req.user.id }, { assignee: req.user.id }] }).populate("assignee", "name email").populate("user", "name email").populate("creator", "name email");
     }
     if (!task) {
       return res.status(400).json({ status: false, msg: "No task found.." });
@@ -46,11 +76,13 @@ exports.getTask = async (req, res) => {
 
 exports.postTask = async (req, res) => {
   try {
-    const { description, userId } = req.body;
+    const { description, userId, title, priority, dueDate, tags } = req.body;
     if (!description) {
       return res.status(400).json({ status: false, msg: "Description of task not found" });
     }
     let owner = req.user.id;
+
+    // If admin creates task for another user, make that user the owner (on-behalf-of)
     if (req.user.role === "admin" && userId) {
       if (!validateObjectId(userId)) return res.status(400).json({ status: false, msg: "User id not valid" });
       const User = require("../models/User");
@@ -59,7 +91,14 @@ exports.postTask = async (req, res) => {
       owner = userId;
     }
 
-    const task = await Task.create({ user: owner, description });
+    // normalize tags
+    let tagsArr = [];
+    if (tags) {
+      if (Array.isArray(tags)) tagsArr = tags.map(String);
+      else tagsArr = String(tags).split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    const task = await Task.create({ user: owner, description, title: title || '', priority: priority || 'medium', dueDate: dueDate ? new Date(dueDate) : null, tags: tagsArr, creator: req.user.id });
     res.status(200).json({ task, status: true, msg: "Task created successfully.." });
   }
   catch (err) {
@@ -70,9 +109,18 @@ exports.postTask = async (req, res) => {
 
 exports.putTask = async (req, res) => {
   try {
-    const { description } = req.body;
-    if (!description) {
-      return res.status(400).json({ status: false, msg: "Description of task not found" });
+    const { description, status, title, priority, dueDate, tags } = req.body;
+
+    if (description === undefined && status === undefined && title === undefined && priority === undefined && dueDate === undefined && tags === undefined) {
+      return res.status(400).json({ status: false, msg: "No update data provided" });
+    }
+
+    if (status && !['pending', 'in-progress', 'completed'].includes(status)) {
+      return res.status(400).json({ status: false, msg: "Invalid status value" });
+    }
+
+    if (priority && !['low', 'medium', 'high'].includes(priority)) {
+      return res.status(400).json({ status: false, msg: "Invalid priority value" });
     }
 
     if (!validateObjectId(req.params.taskId)) {
@@ -84,11 +132,23 @@ exports.putTask = async (req, res) => {
       return res.status(400).json({ status: false, msg: "Task with given id not found" });
     }
 
-    if (task.user != req.user.id && req.user.role !== "admin") {
-      return res.status(403).json({ status: false, msg: "You can't update task of another user" });
+    // allow update if owner, assignee or admin
+    if (task.user != req.user.id && req.user.role !== "admin" && task.assignee != req.user.id) {
+      return res.status(403).json({ status: false, msg: "You can't update this task" });
     }
 
-    task = await Task.findByIdAndUpdate(req.params.taskId, { description }, { new: true });
+    const update = {};
+    if (description !== undefined) update.description = description;
+    if (status !== undefined) update.status = status;
+    if (title !== undefined) update.title = title;
+    if (priority !== undefined) update.priority = priority;
+    if (dueDate !== undefined) update.dueDate = dueDate ? new Date(dueDate) : null;
+    if (tags !== undefined) {
+      if (Array.isArray(tags)) update.tags = tags.map(String);
+      else update.tags = String(tags).split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    task = await Task.findByIdAndUpdate(req.params.taskId, update, { new: true });
     res.status(200).json({ task, status: true, msg: "Task updated successfully.." });
   }
   catch (err) {

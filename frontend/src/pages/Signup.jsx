@@ -9,7 +9,7 @@ const Signup = () => {
   }, []);
   return (
     <>
-      <MainLayout>
+      <MainLayout hideNavbar>
         <SignupForm />
       </MainLayout>
     </>

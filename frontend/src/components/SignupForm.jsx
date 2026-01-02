@@ -40,46 +40,50 @@ const SignupForm = () => {
 
   const fieldError = (field) => (
     <p className={`mt-1 text-pink-600 text-sm ${formErrors[field] ? "block" : "hidden"}`}>
-      <i className='mr-2 fa-solid fa-circle-exclamation'></i>
+      <svg xmlns="http://www.w3.org/2000/svg" className="inline w-4 h-4 mr-2 align-middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12A9 9 0 1112 3a9 9 0 019 9z"/></svg>
       {formErrors[field]}
     </p>
   )
 
   return (
     <>
-      <form className='m-auto my-16 max-w-[500px] p-8 bg-white border-2 shadow-md rounded-md'>
-        {loading ? (
-          <Loader />
-        ) : (
-          <>
-            <h2 className='text-center mb-4'>Welcome user, please signup here</h2>
-            <div className="mb-4">
-              <label htmlFor="name" className="after:content-['*'] after:ml-0.5 after:text-red-500">Name</label>
-              <Input type="text" name="name" id="name" value={formData.name} placeholder="Your name" onChange={handleChange} />
-              {fieldError("name")}
-            </div>
+      <div className='w-full max-w-md'>
+        <form className='bg-white shadow-lg rounded-xl p-8 border border-gray-100' onSubmit={handleSubmit}>
+          {loading ? <Loader /> : (
+            <>
+              <div>
+                <div className='auth-logo'>maskaxwadaag</div>
+                <h2 className='text-center text-2xl font-semibold mb-2 text-gray-800'>Create your account</h2>
+              </div>
+              <p className='text-center text-sm text-gray-500 mb-6'>Join the Maskax Wadaag team to manage tasks and collaborate with your team.</p>
 
-            <div className="mb-4">
-              <label htmlFor="email" className="after:content-['*'] after:ml-0.5 after:text-red-500">Email</label>
-              <Input type="text" name="email" id="email" value={formData.email} placeholder="youremail@domain.com" onChange={handleChange} />
-              {fieldError("email")}
-            </div>
+              <div className="mb-4">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <Input type="text" name="name" id="name" value={formData.name} placeholder="Your full name" onChange={handleChange} />
+                {fieldError("name")}
+              </div>
 
-            <div className="mb-4">
-              <label htmlFor="password" className="after:content-['*'] after:ml-0.5 after:text-red-500">Password</label>
-              <Input type="password" name="password" id="password" value={formData.password} placeholder="Your password.." onChange={handleChange} />
-              {fieldError("password")}
-            </div>
+              <div className="mb-4">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <Input type="text" name="email" id="email" value={formData.email} placeholder="you@company.com" onChange={handleChange} />
+                {fieldError("email")}
+              </div>
 
-            <button className='bg-primary text-white px-4 py-2 font-medium hover:bg-primary-dark' onClick={handleSubmit}>Submit</button>
+              <div className="mb-4">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <Input type="password" name="password" id="password" value={formData.password} placeholder="Create a password" onChange={handleChange} />
+                {fieldError("password")}
+              </div>
 
-            <div className='pt-4'>
-              <Link to="/login" className='text-blue-400'>Already have an account? Login here</Link>
-            </div>
-          </>
-        )}
+              <button type='submit' className='w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-md font-medium transition'>Create account</button>
 
-      </form>
+              <div className='pt-4 text-center'>
+                <Link to="/login" className='text-indigo-600 hover:underline text-sm'>Already have an account? Log in</Link>
+              </div>
+            </>
+          )}
+        </form>
+      </div>
     </>
   )
 }

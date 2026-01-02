@@ -19,156 +19,155 @@ const Task = () => {
   const [task, setTask] = useState(null)
   const [users, setUsers] = useState([])
   const [formData, setFormData] = useState({
+    title: '',
     description: '',
+    priority: 'medium',
+    dueDate: '',
+    tags: '',
     userId: ''
   })
   const [formErrors, setFormErrors] = useState({})
 
-  /* 🚫 User ha geli karin add task page */
+  const isOwner = task?.user?._id === authState.user?._id
+  const isAssignee = task?.assignee?._id === authState.user?._id
+  // Only admins may edit the description or update the task; owners/assignees may only change status
+  const canEdit = authState.user && authState.user.role === 'admin'
+
   useEffect(() => {
-    if (mode === 'add' && !isAdmin) {
-      navigate('/')
-    }
+    if (mode === 'add' && !isAdmin) navigate('/')
   }, [mode, isAdmin, navigate])
 
-  /* page title */
+  // allow viewing task details for any logged-in user; only admins/owners can edit
+
   useEffect(() => {
-    document.title = mode === 'add' ? 'Add task' : 'Update task'
+    document.title = mode === 'add' ? 'Add Task' : 'Task Details'
   }, [mode])
 
-  /* load single task */
   const loadTask = useCallback(() => {
     if (mode !== 'update') return
-
-    const config = {
-      url: `/tasks/${taskId}`,
-      method: 'get',
-      headers: { Authorization: authState.token }
-    }
-
-    fetchData(config, { showSuccessToast: false }).then(data => {
-      setTask(data.task)
-      setFormData({ description: data.task.description })
+    const cfg = { url: `/tasks/${taskId}`, method: 'get', headers: { Authorization: authState.token } }
+    fetchData(cfg, { showSuccessToast: false }).then(d => {
+      setTask(d.task)
+      setFormData({
+        title: d.task.title || '',
+        description: d.task.description || '',
+        priority: d.task.priority || 'medium',
+        dueDate: d.task.dueDate ? String(d.task.dueDate).split('T')[0] : '',
+        tags: (d.task.tags || []).join(', '),
+      })
     })
   }, [mode, taskId, authState.token, fetchData])
 
-  /* load users (admin only) */
   const loadUsers = useCallback(() => {
     if (mode !== 'add' || !isAdmin) return
-
-    const cfg = {
-      url: '/users',
-      method: 'get',
-      headers: { Authorization: authState.token }
-    }
-
-    fetchData(cfg, { showSuccessToast: false })
-      .then(d => setUsers(d.users))
-      .catch(() => {})
+    const cfg = { url: '/users', method: 'get', headers: { Authorization: authState.token } }
+    fetchData(cfg, { showSuccessToast: false }).then(d => setUsers(d.users)).catch(()=>{})
   }, [mode, isAdmin, authState.token, fetchData])
 
-  useEffect(() => {
-    loadTask()
-  }, [loadTask])
+  useEffect(() => { loadTask() }, [loadTask])
+  useEffect(() => { loadUsers() }, [loadUsers])
 
-  useEffect(() => {
-    loadUsers()
-  }, [loadUsers])
-
-  const handleChange = e => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
-  }
-
-  const handleReset = e => {
-    e.preventDefault()
-    setFormData({ description: task.description })
-  }
+  const handleChange = e => setFormData({ ...formData, [e.target.name]: e.target.value })
 
   const handleSubmit = e => {
     e.preventDefault()
     const errors = validateManyFields('task', formData)
-    setFormErrors({})
-
-    if (errors.length > 0) {
-      setFormErrors(
-        errors.reduce((total, ob) => ({ ...total, [ob.field]: ob.err }), {})
-      )
+    if (errors.length) {
+      setFormErrors(errors.reduce((t, o) => ({ ...t, [o.field]: o.err }), {}))
+      return
+    }
+    // Prevent non-admins from submitting updates (they may only change status)
+    if (mode === 'update' && authState.user?.role !== 'admin') {
       return
     }
 
-    const config =
-      mode === 'add'
-        ? {
-            url: '/tasks',
-            method: 'post',
-            data: formData,
-            headers: { Authorization: authState.token }
-          }
-        : {
-            url: `/tasks/${taskId}`,
-            method: 'put',
-            data: formData,
-            headers: { Authorization: authState.token }
-          }
+    const cfg = mode === 'add'
+      ? { url: '/tasks', method: 'post', data: formData, headers: { Authorization: authState.token } }
+      : { url: `/tasks/${taskId}`, method: 'put', data: formData, headers: { Authorization: authState.token } }
 
-    fetchData(config).then(() => navigate('/'))
+    fetchData(cfg).then(() => navigate('/'))
   }
 
-  const fieldError = field => (
-    <p
-      className={`mt-1 text-pink-600 text-sm ${
-        formErrors[field] ? 'block' : 'hidden'
-      }`}
-    >
-      <i className='mr-2 fa-solid fa-circle-exclamation'></i>
-      {formErrors[field]}
-    </p>
-  )
+  const handleStatusChange = async status => {
+    if (!task) return
+    const cfg = { url: `/tasks/${task._id}`, method: 'put', headers: { Authorization: authState.token }, data: { status } }
+    await fetchData(cfg)
+    loadTask()
+  }
 
   return (
     <MainLayout>
       <form className='m-auto my-16 max-w-[1000px] bg-white p-8 border-2 shadow-md rounded-md'>
-        {loading ? (
-          <Loader />
-        ) : (
+        {loading ? <Loader /> : (
           <>
-            <h2 className='text-center mb-4'>
-              {mode === 'add' ? 'Add New Task' : 'Edit Task'}
-            </h2>
+            <h2 className='text-center mb-4'>Task Details</h2>
 
-            {mode === 'update' && task && (
+            {task && (
               <div className='mb-4 flex gap-2'>
-                <span className='text-xs px-2 py-1 bg-gray-100 rounded'>
-                  Creator:{' '}
-                  {task.user?._id === authState.user?._id
-                    ? 'You'
-                    : task.user?.name || 'Unknown'}
-                </span>
+                <span className='text-xs px-2 py-1 bg-gray-100 rounded'>Owner: {isOwner ? 'You' : task.user?.name}</span>
+                <span className='text-xs px-2 py-1 bg-gray-50 rounded'>Status: {task.status}</span>
 
-                {task.assignee ? (
-                  <span className='text-xs px-2 py-1 bg-green-100 rounded'>
-                    Assigned to: {task.assignee.name}
-                  </span>
-                ) : (
-                  <span className='text-xs px-2 py-1 bg-yellow-100 rounded'>
-                    Unassigned
-                  </span>
+                {(isAdmin || isOwner || isAssignee) && (
+                  <select
+                    value={task.status || 'pending'}
+                    onChange={e => handleStatusChange(e.target.value)}
+                    className='border px-2 py-1 rounded'
+                  >
+                    <option value='pending'>Pending</option>
+                    <option value='in-progress'>In Progress</option>
+                    <option value='completed'>Completed</option>
+                  </select>
                 )}
               </div>
             )}
 
-            <div className='mb-4'>
-              <label>Description</label>
+            {canEdit ? (
               <Textarea
-                name='description'
                 value={formData.description}
+                disabled={!canEdit}
                 onChange={handleChange}
-                placeholder='Write here...'
+                name='description'
               />
-              {fieldError('description')}
+            ) : (
+              <div className='whitespace-pre-wrap border rounded p-4 bg-white min-h-[150px] text-gray-800'>
+                {formData.description}
+              </div>
+            )}
+
+            <div className='mt-4 grid grid-cols-1 md:grid-cols-2 gap-4'>
+              <div>
+                <label className='block text-sm'>Title</label>
+                <input name='title' value={formData.title} onChange={handleChange} className='w-full border px-2 py-1 rounded' disabled={!canEdit && mode==='update'} />
+              </div>
+
+              <div>
+                <label className='block text-sm'>Priority</label>
+                <select name='priority' value={formData.priority} onChange={handleChange} className='w-full border px-2 py-1 rounded' disabled={!canEdit && mode==='update'}>
+                  <option value='low'>Low</option>
+                  <option value='medium'>Medium</option>
+                  <option value='high'>High</option>
+                </select>
+              </div>
+
+              <div>
+                <label className='block text-sm'>Due Date</label>
+                <input type='date' name='dueDate' value={formData.dueDate} onChange={handleChange} className='w-full border px-2 py-1 rounded' disabled={!canEdit && mode==='update'} />
+              </div>
+
+              <div>
+                <label className='block text-sm'>Tags (comma separated)</label>
+                <input name='tags' value={formData.tags} onChange={handleChange} className='w-full border px-2 py-1 rounded' disabled={!canEdit && mode==='update'} />
+              </div>
             </div>
 
-            {/* ✅ Assign user (ADMIN ONLY) */}
+            {formErrors.description && (
+              <p className='mt-1 text-pink-600 text-sm'>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="inline w-4 h-4 mr-2 align-middle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12A9 9 0 1112 3a9 9 0 019 9z"/></svg>
+                  {formErrors.description}
+                </p>
+            )}
+
+            {/* Assign user when admin creates a task */}
             {mode === 'add' && isAdmin && (
               <div className='mb-4'>
                 <label>Assign To</label>
@@ -180,39 +179,27 @@ const Task = () => {
                 >
                   <option value=''>Select user</option>
                   {users.map(u => (
-                    <option key={u._id} value={u._id}>
-                      {u.name} - {u.email}
-                    </option>
+                    <option key={u._id} value={u._id}>{u.name} - {u.email}</option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* ✅ Add / Update button (ADMIN ONLY FOR ADD) */}
-            {!(mode === 'add' && !isAdmin) && (
-              <button
-                className='bg-primary text-white px-4 py-2 font-medium'
-                onClick={handleSubmit}
-              >
-                {mode === 'add' ? 'Add Task' : 'Update Task'}
+            {(mode === 'add' && isAdmin) && (
+              <button onClick={handleSubmit} className='bg-primary text-white px-4 py-2 mt-4'>
+                Add Task
               </button>
             )}
 
-            <button
-              className='ml-4 bg-red-500 text-white px-4 py-2 font-medium'
-              onClick={() => navigate('/')}
-            >
-              Cancel
+            {(mode === 'update' && canEdit) && (
+              <button onClick={handleSubmit} className='bg-primary text-white px-4 py-2 mt-4'>
+                Update
+              </button>
+            )}
+
+            <button onClick={() => navigate('/')} className='ml-4 bg-red-500 text-white px-4 py-2'>
+              Back
             </button>
-
-            {mode === 'update' && (
-              <button
-                className='ml-4 bg-blue-500 text-white px-4 py-2 font-medium'
-                onClick={handleReset}
-              >
-                Reset
-              </button>
-            )}
           </>
         )}
       </form>
